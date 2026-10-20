@@ -20,6 +20,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Domain\Proyeccion2050.Domain.csproj" />
+	  
   </ItemGroup>
+
+	<ItemGroup>
+		<Content Include="..\..\data\limpio.csv" Link="data\limpio.csv" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
 
 </Project>
