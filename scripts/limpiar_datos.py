@@ -7,7 +7,6 @@ csv["poblacion"] = pd.to_numeric(csv["poblacion"], errors='coerce')
 csv["anio"] = pd.to_numeric(csv["anio"], errors='coerce')
 csv['edad_min'] = pd.to_numeric(csv['edad'].str.extract(r'(\d+)')[0]).astype('Int64')
 
-
 csv_pivot = csv.pivot_table(index=['anio', 'sexo'], columns='edad_min', values='poblacion', aggfunc='sum').reset_index()
 
 hombres = csv_pivot[csv_pivot["sexo"].str.strip().str.lower() == "hombres"]
