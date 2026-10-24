@@ -15,7 +15,7 @@ public class Proyeccion2050Context : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Configuración de la llave primaria compuesta
+      
         modelBuilder.Entity<FilaPoblacion>()
             .HasKey(x => new { x.Sexo, x.EdadMin, x.Anio });
 
