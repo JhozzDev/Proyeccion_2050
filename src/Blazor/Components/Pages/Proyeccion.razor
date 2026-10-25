@@ -1,0 +1,167 @@
+﻿@page "/proyeccion"
+@rendermode InteractiveServer
+@using Proyeccion2050.Domain
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>Envejecimiento de la población dominicana 1950-2050</PageTitle>
+
+<h3>Envejecimiento de la población dominicana (1950 - 2050)</h3>
+
+<div class="mb-3">
+    <label class="form-label">Año: <strong>@anioSeleccionado</strong></label>
+    <input type="range" class="form-range" min="1950" max="2050" step="5" @bind="anioSeleccionado" @bind:event="oninput" @onchange="CargarDatos" />
+    <div class="d-flex justify-content-between">
+        <small>1950</small>
+        <small>2050</small>
+    </div>
+</div>
+
+@if (cargando)
+{
+    <p>Cargando...</p>
+}
+else if (indicadores == null)
+{
+    <p>Sin datos para este año.</p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col"><div class="card text-center p-2"><div>% Menores de 15</div><strong>@indicadores.PcMenores15 %</strong></div></div>
+        <div class="col"><div class="card text-center p-2"><div>% Mayores de 65</div><strong>@indicadores.PcMayores65 %</strong></div></div>
+        <div class="col"><div class="card text-center p-2"><div>Razón de Dependencia</div><strong>@indicadores.RazonDependencia</strong></div></div>
+        <div class="col"><div class="card text-center p-2"><div>Razón de Feminidad</div><strong>@indicadores.RazonFeminidad</strong></div></div>
+    </div>
+
+    <h5>Pirámide poblacional por grupos quinquenales</h5>
+    <div class="pyramid">
+        <div class="pyramid-header">
+            <div class="pyramid-col">Hombres</div>
+            <div class="pyramid-col center">Grupo de edad</div>
+            <div class="pyramid-col">Mujeres</div>
+        </div>
+        @foreach (var g in grupos.OrderByDescending(g => g.EdadMin))
+        {
+            var maxVal = grupos.Any() ? grupos.Max(x => Math.Max(x.Hombres, x.Mujeres)) : 1m;
+            var hombrePct = maxVal == 0 ? 0 : (double)(g.Hombres / maxVal * 100);
+            var mujerPct = maxVal == 0 ? 0 : (double)(g.Mujeres / maxVal * 100);
+            <div class="pyramid-row">
+                <div class="pyramid-bar-col left">
+                    <span class="pyramid-value">@g.Hombres.ToString("N0")</span>
+                    <div class="pyramid-bar hombre" style="width: @hombrePct.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                </div>
+                <div class="pyramid-label">@g.Etiqueta</div>
+                <div class="pyramid-bar-col right">
+                    <div class="pyramid-bar mujer" style="width: @mujerPct.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                    <span class="pyramid-value">@g.Mujeres.ToString("N0")</span>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<style>
+    .pyramid {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    .pyramid-header {
+        display: grid;
+        grid-template-columns: 1fr 120px 1fr;
+        font-weight: bold;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    .pyramid-col {
+        padding: 0.25rem;
+    }
+    .pyramid-col.center {
+        text-align: center;
+    }
+    .pyramid-row {
+        display: grid;
+        grid-template-columns: 1fr 120px 1fr;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+    .pyramid-bar-col {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .pyramid-bar-col.left {
+        justify-content: flex-end;
+    }
+    .pyramid-bar-col.right {
+        justify-content: flex-start;
+    }
+    .pyramid-bar {
+        height: 18px;
+        transition: width 0.4s ease;
+        border-radius: 2px;
+    }
+    .pyramid-bar.hombre {
+        background: #4a90e2;
+    }
+    .pyramid-bar.mujer {
+        background: #e94e77;
+    }
+    .pyramid-label {
+        text-align: center;
+        font-size: 0.9rem;
+    }
+    .pyramid-value {
+        font-size: 0.8rem;
+        min-width: 60px;
+        text-align: right;
+    }
+    .pyramid-bar-col.right .pyramid-value {
+        text-align: left;
+    }
+</style>
+
+@code {
+    private HttpClient http => HttpClientFactory.CreateClient("Api");
+    private int anioSeleccionado = 1950;
+    private bool cargando = true;
+    private Indicadores? indicadores;
+    private List<GrupoEdad> grupos = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        cargando = true;
+        StateHasChanged();
+
+        indicadores = await http.GetFromJsonAsync<Indicadores>($"indicadores/{anioSeleccionado}");
+
+        var todas = await http.GetFromJsonAsync<List<FilaPoblacion>>("poblacion/db") ?? new();
+        grupos = todas
+            .Where(f => f.Anio == anioSeleccionado && f.Sexo != Sexo.AmbosSexos)
+            .GroupBy(f => f.EdadMin)
+            .Select(g => new GrupoEdad
+            {
+                EdadMin = g.Key,
+                Etiqueta = g.Key >= 80 ? "80+" : $"{g.Key}-{g.Key + 4}",
+                Hombres = g.Where(x => x.Sexo == Sexo.Hombre).Sum(x => x.Poblacion),
+                Mujeres = g.Where(x => x.Sexo == Sexo.Mujer).Sum(x => x.Poblacion)
+            })
+            .ToList();
+
+        cargando = false;
+        StateHasChanged();
+    }
+
+    public class GrupoEdad
+    {
+        public int EdadMin { get; set; }
+        public string Etiqueta { get; set; } = "";
+        public decimal Hombres { get; set; }
+        public decimal Mujeres { get; set; }
+    }
+}
