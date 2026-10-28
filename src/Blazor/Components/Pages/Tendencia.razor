@@ -1,0 +1,101 @@
+﻿@page "/tendencia"
+@rendermode InteractiveServer
+@using Proyeccion2050.Domain
+@using System.Globalization
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>Evolución 1950-2050</PageTitle>
+
+<h3>Evolución de los indicadores (1950 - 2050)</h3>
+
+@if (cargando)
+{
+    <p>Cargando...</p>
+}
+else if (serie.Count == 0)
+{
+    <p>No hay datos para mostrar.</p>
+}
+else
+{
+    <div class="mb-3">
+        <span class="badge" style="background:#e74c3c;">% Menores de 15</span>
+        <span class="badge" style="background:#3498db;">% Mayores de 65</span>
+        <span class="badge" style="background:#2ecc71;">Razón de Dependencia</span>
+    </div>
+
+    <svg viewBox="0 0 800 400" width="100%" height="400" style="background:#fff; border:1px solid #ddd; border-radius:4px;">
+        <!-- Eje X -->
+        <line x1="60" y1="340" x2="760" y2="340" stroke="#999" stroke-width="1" />
+        <!-- Eje Y -->
+        <line x1="60" y1="40" x2="60" y2="340" stroke="#999" stroke-width="1" />
+
+        <!-- Etiquetas años -->
+        @for (int i = 0; i < serie.Count; i++)
+        {
+            var x = 60 + i * ((700.0) / (serie.Count - 1));
+            <text>@serie[i].Anio</text>
+        }
+
+        <!-- Línea % Menores de 15 -->
+        <polyline points="@PuntosMenores15" fill="none" stroke="#e74c3c" stroke-width="2" />
+        <!-- Línea % Mayores de 65 -->
+        <polyline points="@PuntosMayores65" fill="none" stroke="#3498db" stroke-width="2" />
+        <!-- Línea Razón de Dependencia -->
+        <polyline points="@PuntosDependencia" fill="none" stroke="#2ecc71" stroke-width="2" />
+    </svg>
+
+    <small class="text-muted">Valores escalados para visualizar la tendencia entre 1950 y 2050</small>
+}
+
+@code {
+    private HttpClient http => HttpClientFactory.CreateClient("Api");
+    private bool cargando = true;
+    private List<Indicadores> serie = new();
+
+    // Puntos SVG
+    private string PuntosMenores15 = "";
+    private string PuntosMayores65 = "";
+    private string PuntosDependencia = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        serie = await http.GetFromJsonAsync<List<Indicadores>>("indicadores/serie") ?? new();
+        CalcularPuntos();
+        cargando = false;
+    }
+
+    private void CalcularPuntos()
+    {
+        if (serie.Count == 0) return;
+
+        double ancho = 700;
+        double alto = 300;
+        double margenX = 60;
+        double margenY = 40;
+
+        // Escalas para cada serie
+        PuntosMenores15 = Escalar(serie.Select(s => (double)s.PcMenores15).ToList());
+        PuntosMayores65 = Escalar(serie.Select(s => (double)s.PcMayores65).ToList());
+        PuntosDependencia = Escalar(serie.Select(s => (double)s.RazonDependencia).ToList());
+
+        string Escalar(List<double> valores)
+        {
+            if (valores.Count == 0) return "";
+            double min = valores.Min();
+            double max = valores.Max();
+            if (Math.Abs(max - min) < 0.0001) max = min + 1;
+
+            var puntos = new List<string>();
+            for (int i = 0; i < valores.Count; i++)
+            {
+                double x = margenX + i * (ancho / (valores.Count - 1));
+                // Invertimos Y: valores mayores arriba
+                double y = margenY + (max - valores[i]) / (max - min) * alto;
+                puntos.Add($"{x.ToString("0.00", CultureInfo.InvariantCulture)},{y.ToString("0.00", CultureInfo.InvariantCulture)}");
+            }
+            return string.Join(" ", puntos);
+        }
+    }
+}
